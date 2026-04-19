@@ -12,13 +12,29 @@ import (
 type CreditService struct {
 	userRepo  *repository.UserRepository
 	transRepo *repository.TransactionRepository
+	jobRepo   *repository.JobRepository
 }
 
-func NewCreditService(userRepo *repository.UserRepository, transRepo *repository.TransactionRepository) *CreditService {
+func NewCreditService(userRepo *repository.UserRepository, transRepo *repository.TransactionRepository, jobRepo *repository.JobRepository) *CreditService {
 	return &CreditService{
 		userRepo:  userRepo,
 		transRepo: transRepo,
+		jobRepo:   jobRepo,
 	}
+}
+
+func (s *CreditService) RefundCredits(ctx context.Context, jobID primitive.ObjectID) error {
+	job, err := s.jobRepo.GetByID(ctx, jobID)
+	if err != nil {
+		return err
+	}
+
+	if job.CreditsDeducted <= 0 {
+		return nil // Nothing to refund
+	}
+
+	description := "Refund for failed job: " + job.ID.Hex()
+	return s.AddCredits(ctx, job.UserID, job.CreditsDeducted, description)
 }
 
 func (s *CreditService) AddCredits(ctx context.Context, userID primitive.ObjectID, amount float64, description string) error {

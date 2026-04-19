@@ -17,37 +17,60 @@ func NewSubscriptionService(userRepo *repository.UserRepository) *SubscriptionSe
 	return &SubscriptionService{userRepo: userRepo}
 }
 
-func (s *SubscriptionService) ProcessRenewal(ctx context.Context, userID string, plan models.UserPlan) error {
-	// "Use it or lose it" - Reset balance to baseline
-	var credits float64
+// creditBaseline returns the monthly credit allowance for a given plan.
+func creditBaseline(plan models.UserPlan) float64 {
 	switch plan {
 	case models.PlanPro:
-		credits = 5000
+		return 5000
 	case models.PlanUltra:
-		credits = 25000
+		return 25000
 	default:
-		credits = 0
+		return 0
+	}
+}
+
+// ProcessRenewal resets the user's credit balance to the plan baseline (use-it-or-lose-it)
+// and schedules the next renewal date one month from now.
+func (s *SubscriptionService) ProcessRenewal(ctx context.Context, userID string, plan models.UserPlan) error {
+	id, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return err
 	}
 
-	// Update user balance and renewal date (1 month from now)
 	nextRenewal := time.Now().AddDate(0, 1, 0)
-	
-	id, _ := primitive.ObjectIDFromHex(userID)
-	_ = credits // Used when resetting balance to plan baseline
-	return s.userRepo.UpdateSubscription(ctx, id, plan, models.StatusActive, &nextRenewal)
-	// TODO: Additionally reset credit_balance to 'credits' baseline here
+
+	// 1. Set plan + status + next renewal date
+	if err := s.userRepo.UpdateSubscription(ctx, id, plan, models.StatusActive, &nextRenewal); err != nil {
+		return err
+	}
+
+	// 2. Use-it-or-lose-it: reset credit_balance to plan baseline
+	return s.userRepo.ResetCreditBalance(ctx, id, creditBaseline(plan))
 }
 
+// HandleFailedPayment marks a user as past_due and starts the 48-hour grace period clock.
 func (s *SubscriptionService) HandleFailedPayment(ctx context.Context, userID string) error {
-	// Set status to past_due and record start of grace period
+	id, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return err
+	}
+
 	now := time.Now()
-	id, _ := primitive.ObjectIDFromHex(userID)
-	return s.userRepo.UpdateSubscription(ctx, id, "", models.StatusPastDue, &now)
-	// now should be used for grace_period_started
+
+	// Set subscription_status = past_due
+	if err := s.userRepo.UpdateSubscription(ctx, id, "", models.StatusPastDue, nil); err != nil {
+		return err
+	}
+
+	// Record when grace period started and reset notification counter
+	return s.userRepo.SetGracePeriodStart(ctx, id, now)
 }
 
+// DowngradeToFree resets the user to the free plan after grace period expiry.
 func (s *SubscriptionService) DowngradeToFree(ctx context.Context, userID string) error {
-	// Reset to free plan
-	id, _ := primitive.ObjectIDFromHex(userID)
+	id, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return err
+	}
 	return s.userRepo.UpdateSubscription(ctx, id, models.PlanFree, models.StatusActive, nil)
 }

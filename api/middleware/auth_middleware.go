@@ -17,16 +17,27 @@ import (
 func JWTMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		authHeader := c.Request().Header.Get("Authorization")
-		if authHeader == "" {
-			return c.JSON(http.StatusUnauthorized, dto.ErrorResponse{Message: "Missing authorization header"})
+		var tokenString string
+
+		if authHeader != "" {
+			parts := strings.Split(authHeader, " ")
+			if len(parts) == 2 && parts[0] == "Bearer" {
+				tokenString = parts[1]
+			}
 		}
 
-		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 || parts[0] != "Bearer" {
-			return c.JSON(http.StatusUnauthorized, dto.ErrorResponse{Message: "Invalid authorization header format"})
+		// Fallback to cookie if header is missing or invalid
+		if tokenString == "" {
+			cookie, err := c.Cookie("auth_token")
+			if err == nil {
+				tokenString = cookie.Value
+			}
 		}
 
-		tokenString := parts[1]
+		if tokenString == "" {
+			return c.JSON(http.StatusUnauthorized, dto.ErrorResponse{Message: "Missing or invalid authorization"})
+		}
+
 		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 			return []byte(config.AppConfig.JWTSecret), nil
 		})

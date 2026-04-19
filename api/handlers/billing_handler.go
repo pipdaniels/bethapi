@@ -1,44 +1,117 @@
 package handlers
 
 import (
-	"crypto/hmac"
-	"crypto/sha512"
-	"encoding/hex"
-	"io"
+	"log"
 	"net/http"
 
 	"bethapi/api/dto"
+	"bethapi/api/middleware"
+	"bethapi/api/models"
+	"bethapi/api/repository"
+	"bethapi/billing"
 	"bethapi/config"
 	"github.com/labstack/echo/v4"
 )
 
-type BillingHandler struct{}
-
-func (h *BillingHandler) HandlePaystackWebhook(c echo.Context) error {
-	// 1. Verify Signature
-	signature := c.Request().Header.Get("x-paystack-signature")
-	body, _ := io.ReadAll(c.Request().Body)
-	
-	hash := hmac.New(sha512.New, []byte(config.AppConfig.R2SecretKey)) // Replace with Paystack secret
-	hash.Write(body)
-	expectedSignature := hex.EncodeToString(hash.Sum(nil))
-
-	if signature != expectedSignature {
-		return c.JSON(http.StatusUnauthorized, dto.ErrorResponse{Message: "Invalid signature"})
-	}
-
-	// 2. Parse Event and Update User Credits
-	// ... logic to call creditService.AddCredits(...)
-
-	return c.NoContent(http.StatusOK)
+type BillingHandler struct {
+	paymentService *billing.PaymentService
+	userRepo       *repository.UserRepository
 }
 
-func (h *BillingHandler) HandleFlutterwaveWebhook(c echo.Context) error {
-	// Similar logic for Flutterwave
-	return c.NoContent(http.StatusOK)
+func NewBillingHandler(paymentService *billing.PaymentService, userRepo *repository.UserRepository) *BillingHandler {
+	return &BillingHandler{
+		paymentService: paymentService,
+		userRepo:       userRepo,
+	}
 }
 
 func (h *BillingHandler) CreateTopupLink(c echo.Context) error {
-	// Logic to generate Flutterwave/Paystack payment URL
-	return c.JSON(http.StatusOK, map[string]string{"link": "https://checkout.flutterwave.com/..."})
+	var req dto.TopupRequest
+	if err := middleware.BindAndValidate(c, &req); err != nil {
+		return err
+	}
+
+	user := c.Get("user").(models.User)
+	provider, err := h.paymentService.GetActiveProvider()
+	if err != nil {
+		return c.JSON(http.StatusServiceUnavailable, dto.ErrorResponse{Message: err.Error()})
+	}
+
+	// Calculate credits based on amount and PAYG rate ($1 = 1/0.015 credits)
+	// We assume input amount is in the chosen currency
+	rate := h.paymentService.GetConversionRate(req.Currency)
+	usdAmount := req.Amount / rate
+	credits := usdAmount / config.AppConfig.RatePAYG
+
+	checkoutReq := billing.CheckoutRequest{
+		UserID:         user.ID.Hex(),
+		Email:          user.Email,
+		Amount:         req.Amount,
+		Currency:       req.Currency,
+		IsSubscription: false,
+		Credits:        credits,
+	}
+
+	url, err := provider.CreateCheckoutSession(c.Request().Context(), checkoutReq)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Message: "Failed to create payment session"})
+	}
+
+	return c.JSON(http.StatusOK, dto.CheckoutResponse{URL: url})
+}
+
+func (h *BillingHandler) Subscribe(c echo.Context) error {
+	var req dto.SubscribeRequest
+	if err := middleware.BindAndValidate(c, &req); err != nil {
+		return err
+	}
+
+	user := c.Get("user").(models.User)
+	provider, err := h.paymentService.GetActiveProvider()
+	if err != nil {
+		return c.JSON(http.StatusServiceUnavailable, dto.ErrorResponse{Message: err.Error()})
+	}
+
+	// Base prices in USD
+	var amount float64
+	var credits float64
+	if req.Plan == "pro" {
+		amount = config.AppConfig.PricePro
+		credits = config.AppConfig.CreditsPro
+	} else {
+		amount = config.AppConfig.PriceUltra
+		credits = config.AppConfig.CreditsUltra
+	}
+
+	// Convert to desired currency
+	rate := h.paymentService.GetConversionRate(req.Currency)
+	convertedAmount := amount * rate
+
+	checkoutReq := billing.CheckoutRequest{
+		UserID:         user.ID.Hex(),
+		Email:          user.Email,
+		Amount:         convertedAmount,
+		Currency:       req.Currency,
+		IsSubscription: true,
+		Credits:        credits,
+	}
+
+	url, err := provider.CreateCheckoutSession(c.Request().Context(), checkoutReq)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Message: "Failed to create subscription session"})
+	}
+
+	return c.JSON(http.StatusOK, dto.CheckoutResponse{URL: url})
+}
+
+func (h *BillingHandler) HandleWebhook(c echo.Context) error {
+	provider := c.Param("provider")
+	
+	err := h.paymentService.ProcessWebhook(c, provider)
+	if err != nil {
+		log.Printf("Webhook error (%s): %v", provider, err)
+		return c.JSON(http.StatusBadRequest, dto.ErrorResponse{Message: "Webhook verification failed"})
+	}
+
+	return c.NoContent(http.StatusOK)
 }

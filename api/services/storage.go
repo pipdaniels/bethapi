@@ -1,9 +1,12 @@
 package services
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log"
+	"os"
 	"time"
 
 	"bethapi/config"
@@ -63,4 +66,34 @@ func (s *StorageService) GetPresignedURL(ctx context.Context, key string, expire
 
 func (s *StorageService) GetPublicURL(key string) string {
 	return fmt.Sprintf("%s/%s", s.BaseURL, key)
+}
+
+func (s *StorageService) Upload(ctx context.Context, key string, data []byte, contentType string) error {
+	_, err := s.S3Client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:      aws.String(s.Bucket),
+		Key:         aws.String(key),
+		Body:        bytes.NewReader(data),
+		ContentType: aws.String(contentType),
+	})
+	return err
+}
+
+func (s *StorageService) Download(ctx context.Context, key string, localPath string) error {
+	output, err := s.S3Client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(s.Bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return err
+	}
+	defer output.Body.Close()
+
+	out, err := os.Create(localPath)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, output.Body)
+	return err
 }

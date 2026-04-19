@@ -5,85 +5,142 @@ import (
 	"log"
 	"time"
 
-	"bethapi/api/database"
 	"bethapi/api/models"
 	"bethapi/api/repository"
 	"bethapi/api/services"
-
-	"go.mongodb.org/mongo-driver/bson"
+	"bethapi/billing"
+	"bethapi/config"
 )
 
+// BillingWorker handles subscription renewals and the 48-hour grace period
+// notification chain. It is intended to run on a regular schedule (e.g. every hour).
 type BillingWorker struct {
-	userRepo *repository.UserRepository
-	email    *services.EmailService
+	userRepo       *repository.UserRepository
+	email          *services.EmailService
+	subService     *billing.SubscriptionService
+	paymentService *billing.PaymentService
 }
 
-func NewBillingWorker(userRepo *repository.UserRepository, email *services.EmailService) *BillingWorker {
+func NewBillingWorker(userRepo *repository.UserRepository, email *services.EmailService, paymentService *billing.PaymentService) *BillingWorker {
 	return &BillingWorker{
-		userRepo: userRepo,
-		email:    email,
+		userRepo:       userRepo,
+		email:          email,
+		subService:     billing.NewSubscriptionService(userRepo),
+		paymentService: paymentService,
 	}
 }
 
+// CheckRenewals finds every active paid subscription whose renewal date has passed
+// and triggers a renewal attempt. In production this would call the payment processor;
+// here it calls ProcessRenewal directly (webhook-based flow can replace this).
 func (w *BillingWorker) CheckRenewals(ctx context.Context) {
-	// 1. Find past_due subscriptions or those expiring now
-	now := time.Now()
-	cursor, err := database.GetCollection("users").Find(ctx, bson.M{
-		"subscription_status": models.StatusActive,
-		"renews_at":           bson.M{"$lte": now},
-	})
+	users, err := w.userRepo.FindExpiringSubscriptions(ctx)
 	if err != nil {
-		log.Printf("Error finding expiring subscriptions: %v", err)
+		log.Printf("BillingWorker.CheckRenewals: query error: %v", err)
 		return
 	}
-	defer cursor.Close(ctx)
 
-	for cursor.Next(ctx) {
-		var user models.User
-		if err := cursor.Decode(&user); err != nil {
+	for _, user := range users {
+		log.Printf("BillingWorker: attempting renewal for %s (plan=%s)", user.Email, user.Plan)
+
+		if user.PaymentToken == "" {
+			log.Printf("BillingWorker: No payment token for %s — starting grace period", user.Email)
+			w.subService.HandleFailedPayment(ctx, user.ID.Hex())
 			continue
 		}
 
-		// Trigger renewal attempt (In reality, notify payment processor or wait for webhook)
-		log.Printf("Attempting renewal for user %s", user.Email)
+		// Calculate amount based on plan
+		var amount float64
+		if user.Plan == models.PlanPro {
+			amount = config.AppConfig.PricePro
+		} else {
+			amount = config.AppConfig.PriceUltra
+		}
+
+		// Attempt auto-charge
+		provider, ok := w.paymentService.GetProvider(user.PaymentProvider)
+		if !ok {
+			log.Printf("BillingWorker: Unknown provider %s for user %s", user.PaymentProvider, user.Email)
+			w.subService.HandleFailedPayment(ctx, user.ID.Hex())
+			continue
+		}
+
+		// Subscriptions are usually in USD base, but we could convert if needed.
+		// For simplicity, we auto-charge in USD if it's the base.
+		_, err := provider.ChargeSavedCard(ctx, user.PaymentToken, amount, "USD")
+		if err != nil {
+			log.Printf("BillingWorker: Charge failed for %s: %v — starting grace period", user.Email, err)
+			w.subService.HandleFailedPayment(ctx, user.ID.Hex())
+			continue
+		}
+
+		// On success, reset credits and extend date
+		if err := w.subService.ProcessRenewal(ctx, user.ID.Hex(), user.Plan); err != nil {
+			log.Printf("BillingWorker: could not finalize renewal for %s: %v", user.Email, err)
+		} else {
+			log.Printf("BillingWorker: auto-renewal succeeded for %s", user.Email)
+		}
 	}
 }
 
+// HandleGracePeriods processes every past_due user and either:
+//   - Sends the next warning email (every 12 h, up to 4 times), or
+//   - Downgrades to the free plan once the 48-hour grace window has expired.
 func (w *BillingWorker) HandleGracePeriods(ctx context.Context) {
-	now := time.Now()
-	// Find users who are past_due and within 48h grace
-	cursor, err := database.GetCollection("users").Find(ctx, bson.M{
-		"subscription_status": models.StatusPastDue,
-	})
+	gracePeriod := time.Duration(config.AppConfig.GracePeriodHours) * time.Hour
+	maxNotifications := config.AppConfig.RenewalNotifyCount
+
+	users, err := w.userRepo.FindPastDueUsers(ctx)
 	if err != nil {
+		log.Printf("BillingWorker.HandleGracePeriods: query error: %v", err)
 		return
 	}
-	defer cursor.Close(ctx)
 
-	for cursor.Next(ctx) {
-		var user models.User
-		if err := cursor.Decode(&user); err != nil {
-			continue
-		}
+	now := time.Now()
 
+	for _, user := range users {
 		if user.GracePeriodStarted == nil {
+			// Grace period was never recorded — set it now and send first notification.
+			if err := w.userRepo.SetGracePeriodStart(ctx, user.ID, now); err != nil {
+				log.Printf("BillingWorker: SetGracePeriodStart error for %s: %v", user.Email, err)
+			}
+			w.sendNotification(ctx, user, int(gracePeriod.Hours()))
 			continue
 		}
 
 		elapsed := now.Sub(*user.GracePeriodStarted)
 
-		if elapsed >= 48*time.Hour {
-			// Downgrade
-			log.Printf("Grace period expired for %s. Downgrading...", user.Email)
-			// r.DowngradeToFree(...)
+		if elapsed >= gracePeriod {
+			// ─── Grace period expired → downgrade ───────────────────────────────
+			log.Printf("BillingWorker: grace period expired for %s — downgrading to free", user.Email)
+			if err := w.subService.DowngradeToFree(ctx, user.ID.Hex()); err != nil {
+				log.Printf("BillingWorker: DowngradeToFree error for %s: %v", user.Email, err)
+			}
 		} else {
-			// Check if we should send next notification (every 12h)
-			expectedNotifications := int(elapsed.Hours()/12) + 1
-			if expectedNotifications > user.NotificationCount && user.NotificationCount < 4 {
-				hoursLeft := 48 - int(elapsed.Hours())
-				w.email.SendGracePeriodWarning(user.Email, hoursLeft, user.NotificationCount+1)
-				// Update notification count in DB
+			// ─── Still within grace period → fire next notification if due ───────
+			// Notifications are evenly spaced: every (gracePeriod / maxNotifications).
+			notifyInterval := gracePeriod / time.Duration(maxNotifications)
+			expectedNotifications := int(elapsed/notifyInterval) + 1
+
+			if expectedNotifications > user.NotificationCount && user.NotificationCount < maxNotifications {
+				hoursLeft := int((gracePeriod - elapsed).Hours())
+				w.sendNotification(ctx, user, hoursLeft)
 			}
 		}
+	}
+}
+
+// sendNotification fires a grace period warning email and increments the counter in DB.
+func (w *BillingWorker) sendNotification(ctx context.Context, user models.User, hoursLeft int) {
+	attempt := user.NotificationCount + 1
+	log.Printf("BillingWorker: sending grace warning #%d to %s (%d h left)", attempt, user.Email, hoursLeft)
+
+	if err := w.email.SendGracePeriodWarning(user.Email, hoursLeft, attempt); err != nil {
+		log.Printf("BillingWorker: email send error for %s: %v", user.Email, err)
+		return
+	}
+
+	if err := w.userRepo.IncrementNotificationCount(ctx, user.ID); err != nil {
+		log.Printf("BillingWorker: IncrementNotificationCount error for %s: %v", user.Email, err)
 	}
 }

@@ -4,58 +4,138 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 
-	"github.com/spf13/viper"
+	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	Port           string `mapstructure:"PORT"`
-	MongoURI       string `mapstructure:"MONGO_URI"`
-	MongoDBName    string `mapstructure:"MONGO_DB_NAME"`
-	RedisAddr      string `mapstructure:"REDIS_ADDR"`
-	JWTSecret      string `mapstructure:"JWT_SECRET"`
-	ResendAPIKey   string `mapstructure:"RESEND_API_KEY"`
-	GoogleAIKey    string `mapstructure:"GOOGLE_AI_API_KEY"`
-	R2AccessKey    string `mapstructure:"R2_ACCESS_KEY"`
-	R2SecretKey    string `mapstructure:"R2_SECRET_KEY"`
-	R2Endpoint     string `mapstructure:"R2_ENDPOINT"`
-	R2Bucket       string `mapstructure:"R2_BUCKET"`
-	R2PublicDomain string `mapstructure:"R2_PUBLIC_DOMAIN"`
-	AllowedOrigins []string `mapstructure:"ALLOWED_ORIGINS"`
+	Port           string
+	MongoURI       string
+	MongoDBName    string
+	RedisAddr      string
+	JWTSecret      string
+	ResendAPIKey   string
+	GoogleAIKey    string
+	GoogleProjectID string
+	GoogleLocation  string
+	R2AccessKey    string
+	R2SecretKey    string
+	R2Endpoint     string
+	R2Bucket       string
+	R2PublicDomain string
+	AllowedOrigins []string
 
 	// Pricing (Credits)
-	PricingLLMPrompt1K  float64 `mapstructure:"PRICING_LLM_PROMPT_1K"`
-	PricingLLMOutput1K  float64 `mapstructure:"PRICING_LLM_OUTPUT_1K"`
-	PricingVideoSec     float64 `mapstructure:"PRICING_VIDEO_SEC"`
-	PricingImagen       float64 `mapstructure:"PRICING_IMAGEN"`
+	PricingLLMPrompt1K  float64
+	PricingLLMOutput1K  float64
+	PricingVideoSec     float64
+	PricingImagen       float64
 
 	// Subscriptions
-	ProPriceID   string `mapstructure:"SUBSCRIPTION_PRO_PRICE_ID"`
-	UltraPriceID string `mapstructure:"SUBSCRIPTION_ULTRA_PRICE_ID"`
+	ProPriceID   string
+	UltraPriceID string
 
 	// Renewal Policy
-	GracePeriodHours int `mapstructure:"RENEWAL_GRACE_PERIOD_HOURS"`
-	RenewalNotifyCount int `mapstructure:"RENEWAL_NOTIFY_COUNT"`
+	GracePeriodHours int
+	RenewalNotifyCount int
+
+	// OAuth & Security
+	GoogleClientID     string
+	GoogleClientSecret string
+	GoogleRedirectURL  string
+	FrontendURL        string
+	OTPExpiryMinutes   int
+	CookieDomain       string
+	Env                string
+
+	// Payments (Secrets)
+	StripeSecretKey     string
+	StripeWebhookSecret  string
+	FlutterwaveSecretKey string
+	FlutterwaveWebhookSecret string
+	PaystackSecretKey    string
+	PaystackWebhookSecret string
+
+	// Conversion Rates (Fixed)
+	RateNGN float64
+	RateKES float64
+	RateGHS float64
+
+	// Tiered Pricing
+	PricePro   float64
+	PriceUltra float64
+	CreditsPro   float64
+	CreditsUltra float64
+	RatePAYG     float64
+
+	PricingVideoSecFast float64
+	PricingVideoSecStd  float64
 }
 
 var AppConfig *Config
 
 func LoadConfig() {
-	viper.SetConfigFile(".env")
-	viper.AutomaticEnv()
-
-	if err := viper.ReadInConfig(); err != nil {
+	// Load .env file if it exists
+	if err := godotenv.Load(); err != nil {
 		log.Printf("No .env file found, using environment variables")
 	}
 
-	AppConfig = &Config{}
-	if err := viper.Unmarshal(AppConfig); err != nil {
-		log.Fatalf("Unable to decode into struct, %v", err)
-	}
+	AppConfig = &Config{
+		Port:           GetEnv("PORT", "8080"),
+		MongoURI:       GetEnv("MONGO_URI", ""),
+		MongoDBName:    GetEnv("MONGO_DB_NAME", "bethapi"),
+		RedisAddr:      GetEnv("REDIS_ADDR", "localhost:6379"),
+		JWTSecret:      GetEnv("JWT_SECRET", ""),
+		ResendAPIKey:   GetEnv("RESEND_API_KEY", ""),
+		GoogleAIKey:    GetEnv("GOOGLE_AI_API_KEY", ""),
+		GoogleProjectID: GetEnv("GOOGLE_PROJECT_ID", ""),
+		GoogleLocation:  GetEnv("GOOGLE_LOCATION", "us-central1"),
+		R2AccessKey:    GetEnv("R2_ACCESS_KEY", ""),
+		R2SecretKey:    GetEnv("R2_SECRET_KEY", ""),
+		R2Endpoint:     GetEnv("R2_ENDPOINT", ""),
+		R2Bucket:       GetEnv("R2_BUCKET", ""),
+		R2PublicDomain: GetEnv("R2_PUBLIC_DOMAIN", ""),
+		AllowedOrigins: strings.Fields(GetEnv("ALLOWED_ORIGINS", "")),
 
-	// Set defaults if missing
-	if AppConfig.Port == "" {
-		AppConfig.Port = "8080"
+		PricingLLMPrompt1K:  GetEnvFloat("PRICING_LLM_PROMPT_1K", 0),
+		PricingLLMOutput1K:  GetEnvFloat("PRICING_LLM_OUTPUT_1K", 0),
+		PricingVideoSec:     GetEnvFloat("PRICING_VIDEO_SEC", 0),
+		PricingImagen:       GetEnvFloat("PRICING_IMAGEN", 0),
+
+		ProPriceID:   GetEnv("SUBSCRIPTION_PRO_PRICE_ID", ""),
+		UltraPriceID: GetEnv("SUBSCRIPTION_ULTRA_PRICE_ID", ""),
+
+		GracePeriodHours:   GetEnvInt("RENEWAL_GRACE_PERIOD_HOURS", 48),
+		RenewalNotifyCount: GetEnvInt("RENEWAL_NOTIFY_COUNT", 4),
+
+		GoogleClientID:     GetEnv("GOOGLE_CLIENT_ID", ""),
+		GoogleClientSecret: GetEnv("GOOGLE_CLIENT_SECRET", ""),
+		GoogleRedirectURL:  GetEnv("GOOGLE_REDIRECT_URL", "http://localhost:8080/api/v1/auth/google/callback"),
+		FrontendURL:        GetEnv("FRONTEND_URL", "http://localhost:3000"),
+		OTPExpiryMinutes:   GetEnvInt("OTP_EXPIRY_MINUTES", 5),
+		CookieDomain:       GetEnv("COOKIE_DOMAIN", "localhost"),
+		Env:                GetEnv("ENV", "development"),
+
+		StripeSecretKey:     GetEnv("STRIPE_SECRET_KEY", ""),
+		StripeWebhookSecret:  GetEnv("STRIPE_WEBHOOK_SECRET", ""),
+		FlutterwaveSecretKey: GetEnv("FLUTTERWAVE_SECRET_KEY", ""),
+		FlutterwaveWebhookSecret: GetEnv("FLUTTERWAVE_WEBHOOK_SECRET", ""),
+		PaystackSecretKey:    GetEnv("PAYSTACK_SECRET_KEY", ""),
+		PaystackWebhookSecret: GetEnv("PAYSTACK_WEBHOOK_SECRET", ""),
+
+		RateNGN: GetEnvFloat("CONVERSION_RATE_NGN", 1500),
+		RateKES: GetEnvFloat("CONVERSION_RATE_KES", 130),
+		RateGHS: GetEnvFloat("CONVERSION_RATE_GHS", 12),
+
+		PricePro:     29.0,
+		PriceUltra:   199.0,
+		CreditsPro:   3500.0,
+		CreditsUltra: 30000.0,
+		RatePAYG:     0.015,
+
+		PricingVideoSecFast: GetEnvFloat("PRICING_VIDEO_SEC_FAST", 1.0),
+		PricingVideoSecStd:  GetEnvFloat("PRICING_VIDEO_SEC_STD", 0.5),
 	}
 }
 

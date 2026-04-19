@@ -35,6 +35,10 @@ type User struct {
 	GracePeriodStarted *time.Time         `bson:"grace_period_started,omitempty" json:"grace_period_started,omitempty"`
 	NotificationCount  int                `bson:"notification_count" json:"notification_count"`
 	APIKey             string             `bson:"api_key,omitempty" json:"api_key,omitempty"`
+	SubscriptionID     string             `bson:"subscription_id,omitempty" json:"subscription_id,omitempty"`
+	PaymentToken       string             `bson:"payment_token,omitempty" json:"payment_token,omitempty"`
+	PaymentProvider    string             `bson:"payment_provider,omitempty" json:"payment_provider,omitempty"`
+	Verified           bool               `bson:"verified" json:"verified"`
 	CreatedAt          time.Time          `bson:"created_at" json:"created_at"`
 	UpdatedAt          time.Time          `bson:"updated_at" json:"updated_at"`
 }
