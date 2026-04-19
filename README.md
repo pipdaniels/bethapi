@@ -79,6 +79,19 @@ The system uses **Google ADK** to manage stateful tool-use. When a job is enqueu
 3. After each tool execution, the `usage_tracker` tool deducts credits based on actual token/second consumption.
 4. Agent state is persisted in MongoDB, allowing for long-running job monitoring and recovery.
 
+## 🔍 Global Request Logging & Tracing
+
+BethAPI now includes a comprehensive tracing system to track requests from the API entry point through background worker processing. This ensures better observability and debugging capabilities.
+
+### Key Features
+- **Request ID Middleware**: Every incoming HTTP request is assigned a unique `X-Request-ID` header for traceability.
+- **Worker Payload Tracing**: Background job payloads include a `TraceID` field, ensuring logs from workers can be correlated with the originating API request.
+- **Trace Logger Utility**: A lightweight helper for consistent logging with `TraceID` across handlers and workers.
+
+### Verification
+- **Automated Tests**: Ensure `X-Request-ID` is present in HTTP responses.
+- **Manual Verification**: Confirm traceability by matching `X-Request-ID` in API logs and worker logs.
+
 ## 📄 License
 
 This project is licensed under the MIT License - see the LICENSE file for details.

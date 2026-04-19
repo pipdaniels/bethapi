@@ -60,7 +60,7 @@ func (h *GenerateHandler) Generate(c echo.Context) error {
 	}
 
 	jobID := job.ID.Hex()
-	traceID := c.Response().Header().Get(echo.HeaderXRequestID)
+	requestID := c.Response().Header().Get(echo.HeaderXRequestID)
 
 	// 2. Determine Queue based on Plan
 	queue := "default"
@@ -72,10 +72,10 @@ func (h *GenerateHandler) Generate(c echo.Context) error {
 
 	// 3. Enqueue task to Asynq
 	payload, _ := json.Marshal(worker.VideoGenerationPayload{
-		TraceID: traceID,
-		UserID:  user.ID.Hex(),
-		JobID:   jobID,
-		Prompt:  req.Prompt,
+		TraceID:   requestID,
+		UserID:    user.ID.Hex(),
+		JobID:     jobID,
+		Prompt:    req.Prompt,
 	})
 
 	task := asynq.NewTask(worker.TypeVideoGeneration, payload)
@@ -95,7 +95,7 @@ func (h *GenerateHandler) Compose(c echo.Context) error {
 	}
 
 	user := c.Get("user").(models.User)
-	traceID := c.Response().Header().Get(echo.HeaderXRequestID)
+	requestID := c.Response().Header().Get(echo.HeaderXRequestID)
 
 	// 1. Convert DTO Clips to Model Clips
 	compositionData := make([]models.CompositionClipData, len(req.Clips))
@@ -126,8 +126,8 @@ func (h *GenerateHandler) Compose(c echo.Context) error {
 
 	// 3. Enqueue task to Asynq
 	payload, _ := json.Marshal(worker.CompositionTaskPayload{
-		TraceID: traceID,
-		JobID:   jobID,
+		TraceID:   requestID,
+		JobID:     jobID,
 	})
 
 	task := asynq.NewTask(worker.TypeVideoComposition, payload)

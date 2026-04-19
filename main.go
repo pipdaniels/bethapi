@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"time"
 
 	"bethapi/api/database"
 	"bethapi/api/handlers"
@@ -20,9 +19,6 @@ import (
 	"github.com/labstack/echo/v4"
 	echomiddleware "github.com/labstack/echo/v4/middleware"
 	"github.com/robfig/cron/v3"
-	"github.com/ulule/limiter/v3"
-	echo_limiter "github.com/ulule/limiter/v3/drivers/middleware/echo"
-	limiter_redis "github.com/ulule/limiter/v3/drivers/store/redis"
 	"google.golang.org/genai"
 )
 
@@ -40,7 +36,7 @@ func main() {
 	userRepo := repository.NewUserRepository()
 	jobRepo := repository.NewJobRepository()
 	transRepo := repository.NewTransactionRepository()
-	
+
 	creditService := billing.NewCreditService(userRepo, transRepo, jobRepo)
 	paymentService := billing.NewPaymentService(userRepo, creditService)
 	authService := services.NewAuthService(userRepo, database.RedisClient)
@@ -75,12 +71,11 @@ func main() {
 
 	// 6. Echo Setup
 	e := echo.New()
-	
-	// Global Rate Limiting (Redis-backed)
-	rateStore, _ := limiter_redis.NewStore(database.RedisClient)
-	rateLimit := limiter.Rate{Period: 1 * time.Minute, Limit: 60}
-	rateInstance := limiter.New(rateStore, rateLimit)
-	e.Use(echo_limiter.NewMiddleware(rateInstance))
+
+	// Global Rate Limiting (Echo built-in)
+	e.Use(echomiddleware.RateLimiterWithConfig(echomiddleware.RateLimiterConfig{
+		Store: echomiddleware.NewRateLimiterMemoryStore(100),
+	}))
 
 	e.Use(echomiddleware.RequestID())
 	e.Use(echomiddleware.LoggerWithConfig(echomiddleware.LoggerConfig{
@@ -109,11 +104,11 @@ func main() {
 	auth.POST("/signup", authHandler.Signup)
 	auth.POST("/login", authHandler.Login)
 	auth.GET("/me", authHandler.GetMe, middleware.CombinedAuthMiddleware)
-	
+
 	// OTP
 	auth.POST("/otp/send", authHandler.SendOTP)
 	auth.POST("/otp/verify", authHandler.VerifyOTP)
-	
+
 	// Google OAuth
 	auth.GET("/google", authHandler.GoogleLogin)
 	auth.GET("/google/callback", authHandler.GoogleCallback)
@@ -162,7 +157,7 @@ func startWorker(client *genai.Client, userRepo *repository.UserRepository, jobR
 	videoWorker := worker.NewVideoWorker(client, userRepo, jobRepo, creditService)
 	compositionWorker := worker.NewCompositionWorker(jobRepo, userRepo, videoService, services.Storage)
 	finalizerWorker := worker.NewFinalizerWorker(jobRepo, userRepo)
-	
+
 	mux := asynq.NewServeMux()
 	mux.HandleFunc(worker.TypeVideoGeneration, videoWorker.ProcessTask)
 	mux.HandleFunc(worker.TypeVideoFinalize, finalizerWorker.ProcessTask)

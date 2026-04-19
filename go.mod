@@ -12,10 +12,15 @@ require (
 	github.com/hibiken/asynq v0.26.0
 	github.com/joho/godotenv v1.5.1
 	github.com/labstack/echo/v4 v4.15.1
+	github.com/redis/go-redis/v9 v9.14.1
 	github.com/resend/resend-go/v2 v2.28.0
+	github.com/robfig/cron/v3 v3.0.1
+	github.com/stripe/stripe-go/v81 v81.4.0
 	go.mongodb.org/mongo-driver v1.17.9
 	golang.org/x/crypto v0.49.0
+	golang.org/x/oauth2 v0.36.0
 	google.golang.org/adk v1.1.0
+	google.golang.org/api v0.276.0
 	google.golang.org/genai v1.54.0
 )
 
@@ -62,12 +67,7 @@ require (
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/montanaflynn/stats v0.7.1 // indirect
-	github.com/pkg/errors v0.9.1 // indirect
-	github.com/redis/go-redis/v9 v9.14.1 // indirect
-	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
-	github.com/stripe/stripe-go/v81 v81.4.0 // indirect
-	github.com/ulule/limiter/v3 v3.11.2 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
@@ -81,12 +81,10 @@ require (
 	go.opentelemetry.io/otel/metric v1.43.0 // indirect
 	go.opentelemetry.io/otel/trace v1.43.0 // indirect
 	golang.org/x/net v0.52.0 // indirect
-	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/text v0.35.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
-	google.golang.org/api v0.276.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260401024825-9d38bb4040a9 // indirect
 	google.golang.org/grpc v1.80.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
