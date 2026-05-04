@@ -3,23 +3,23 @@ package dto
 import "bethapi/api/models"
 
 type SignupRequest struct {
-	Email    string `json:"email" validate:"required,email"`
-	Password string `json:"password" validate:"required,min=8"`
-	Name     string `json:"name" validate:"required"`
+	Email    string `json:"email" form:"email" validate:"required,email"`
+	Password string `json:"password" form:"password" validate:"required,min=8"`
+	Name     string `json:"name" form:"name" validate:"required"`
 }
 
 type LoginRequest struct {
-	Email    string `json:"email" validate:"required,email"`
-	Password string `json:"password" validate:"required"`
+	Email    string `json:"email" form:"email" validate:"required,email"`
+	Password string `json:"password" form:"password" validate:"required"`
 }
 
 type OTPRequest struct {
-	Email string `json:"email" validate:"required,email"`
+	Email string `json:"email" form:"email" validate:"required,email"`
 }
 
 type OTPVerifyRequest struct {
-	Email string `json:"email" validate:"required,email"`
-	Code  string `json:"code" validate:"required,len=6"`
+	Email string `json:"email" form:"email" validate:"required,email"`
+	Code  string `json:"code" form:"code" validate:"required,len=6"`
 }
 
 type AuthResponse struct {

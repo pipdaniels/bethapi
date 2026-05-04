@@ -23,7 +23,7 @@ func InitEmail() {
 
 func (s *EmailService) SendOTP(to string, code string) error {
 	params := &resend.SendEmailRequest{
-		From:    "Beth AI <no-reply@mg.yourdomain.com>",
+		From:    "Beth AI <no-reply@sipstory.tech>",
 		To:      []string{to},
 		Subject: "Your Beth AI verification code",
 		Html:    fmt.Sprintf("<strong>Your verification code is: %s</strong>", code),
@@ -35,7 +35,7 @@ func (s *EmailService) SendOTP(to string, code string) error {
 
 func (s *EmailService) SendPaymentNotification(to string, amount float64, credits float64) error {
 	params := &resend.SendEmailRequest{
-		From:    "Beth AI Billing <billing@mg.yourdomain.com>",
+		From:    "Beth AI Billing <billing@sipstory.tech>",
 		To:      []string{to},
 		Subject: "Payment Successful",
 		Html:    fmt.Sprintf("Hello, your payment of %.2f was successful. %.2f credits have been added to your account.", amount, credits),
@@ -47,7 +47,7 @@ func (s *EmailService) SendPaymentNotification(to string, amount float64, credit
 
 func (s *EmailService) SendGracePeriodWarning(to string, hoursLeft int, attempt int) error {
 	params := &resend.SendEmailRequest{
-		From:    "Beth AI Billing <billing@mg.yourdomain.com>",
+		From:    "Beth AI Billing <billing@sipstory.tech>",
 		To:      []string{to},
 		Subject: "Subscription Renewal Failed - Action Required",
 		Html:    fmt.Sprintf("Your subscription renewal failed (Attempt %d). You have %d hours left before your account is downgraded.", attempt, hoursLeft),

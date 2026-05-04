@@ -98,10 +98,10 @@ func LoadConfig() {
 		R2PublicDomain: GetEnv("R2_PUBLIC_DOMAIN", ""),
 		AllowedOrigins: strings.Fields(GetEnv("ALLOWED_ORIGINS", "")),
 
-		PricingLLMPrompt1K:  GetEnvFloat("PRICING_LLM_PROMPT_1K", 0),
-		PricingLLMOutput1K:  GetEnvFloat("PRICING_LLM_OUTPUT_1K", 0),
-		PricingVideoSec:     GetEnvFloat("PRICING_VIDEO_SEC", 0),
-		PricingImagen:       GetEnvFloat("PRICING_IMAGEN", 0),
+		PricingLLMPrompt1K:  GetEnvFloat("PRICING_LLM_PROMPT_1K", 1),
+		PricingLLMOutput1K:  GetEnvFloat("PRICING_LLM_OUTPUT_1K", 2),
+		PricingVideoSec:     GetEnvFloat("PRICING_VIDEO_SEC", 60),
+		PricingImagen:       GetEnvFloat("PRICING_IMAGEN", 50),
 
 		ProPriceID:   GetEnv("SUBSCRIPTION_PRO_PRICE_ID", ""),
 		UltraPriceID: GetEnv("SUBSCRIPTION_ULTRA_PRICE_ID", ""),
@@ -128,11 +128,11 @@ func LoadConfig() {
 		RateKES: GetEnvFloat("CONVERSION_RATE_KES", 130),
 		RateGHS: GetEnvFloat("CONVERSION_RATE_GHS", 12),
 
-		PricePro:     29.0,
-		PriceUltra:   199.0,
-		CreditsPro:   3500.0,
-		CreditsUltra: 30000.0,
-		RatePAYG:     0.015,
+		PricePro:     GetEnvFloat("PRO_PRICE", 29.0),
+		PriceUltra:   GetEnvFloat("ULTRA_PRICE", 199.0),
+		CreditsPro:   GetEnvFloat("PRO_CREDITS", 3500.0),
+		CreditsUltra: GetEnvFloat("ULTRA_CREDITS", 30000.0),
+		RatePAYG:     GetEnvFloat("PAYG_RATE", 0.015),
 
 		PricingVideoSecFast: GetEnvFloat("PRICING_VIDEO_SEC_FAST", 1.0),
 		PricingVideoSecStd:  GetEnvFloat("PRICING_VIDEO_SEC_STD", 0.5),

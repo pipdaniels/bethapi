@@ -6,9 +6,11 @@ import (
 
 	"bethapi/api/database"
 	"bethapi/api/models"
+
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type JobRepository struct {
@@ -151,4 +153,28 @@ func (r *JobRepository) UpdateCreditsDeducted(ctx context.Context, id primitive.
 		},
 	})
 	return err
+}
+
+// ListByUserPaginated returns paginated jobs for a given user, ordered newest first
+func (r *JobRepository) ListByUserPaginated(ctx context.Context, userID primitive.ObjectID, skip int64, limit int) ([]*models.Job, int64, error) {
+	opts := options.Find().SetSkip(skip).SetLimit(int64(limit)).SetSort(bson.M{"created_at": -1})
+
+	// Get total count for pagination metadata
+	totalCount, err := r.collection.CountDocuments(ctx, bson.M{"user_id": userID})
+	if err != nil {
+		return nil, 0, err
+	}
+
+	cursor, err := r.collection.Find(ctx, bson.M{"user_id": userID}, opts)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer cursor.Close(ctx)
+
+	var jobs []*models.Job
+	if err := cursor.All(ctx, &jobs); err != nil {
+		return nil, 0, err
+	}
+
+	return jobs, totalCount, nil
 }

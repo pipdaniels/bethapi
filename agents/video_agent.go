@@ -70,7 +70,7 @@ func (va *VideoAgent) Run(ctx context.Context, userID string, jobID string, prom
 		if err != nil {
 			return "", err
 		}
-		if event.Author != "user" && event.LLMResponse != nil && !event.LLMResponse.Partial {
+		if event.Author != "user" && len(event.Content.Parts) > 0 {
 			// Extract text parts from the final message
 			msgText := ""
 			for _, part := range event.Content.Parts {
@@ -78,7 +78,9 @@ func (va *VideoAgent) Run(ctx context.Context, userID string, jobID string, prom
 					msgText += part.Text
 				}
 			}
-			finalMessage = msgText
+			if msgText != "" {
+				finalMessage = msgText
+			}
 		}
 	}
 

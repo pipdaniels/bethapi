@@ -140,3 +140,57 @@ func (h *GenerateHandler) Compose(c echo.Context) error {
 	return c.JSON(http.StatusAccepted, dto.GenerateResponse{JobID: jobID})
 }
 
+// ListVideos returns a paginated list of videos created by the authenticated user
+func (h *GenerateHandler) ListVideos(c echo.Context) error {
+	var paginationReq dto.PaginationRequest
+	if err := c.Bind(&paginationReq); err != nil {
+		return c.JSON(http.StatusBadRequest, dto.ApiResponse{
+			Success: false,
+			Error:   "Invalid pagination parameters",
+		})
+	}
+
+	user := c.Get("user").(models.User)
+	ctx := c.Request().Context()
+
+	// Get paginated jobs for the user, only generation types with video URLs
+	jobs, totalCount, err := h.jobRepo.ListByUserPaginated(ctx, user.ID, paginationReq.GetSkip(), paginationReq.GetLimit())
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, dto.ApiResponse{
+			Success: false,
+			Error:   "Failed to retrieve videos",
+		})
+	}
+
+	// Convert jobs to video responses, filtering for completed generation jobs
+	videos := make([]dto.VideoResponse, 0)
+	for _, job := range jobs {
+		if job.Type == models.JobTypeGeneration && job.Status == models.JobStatusCompleted && job.VideoURL != "" {
+			videos = append(videos, dto.VideoResponse{
+				ID:        job.ID.Hex(),
+				Title:     job.Prompt, // Use prompt as title, can be enhanced later
+				Length:    job.Duration,
+				VideoURL:  job.VideoURL,
+				Status:    string(job.Status),
+				CreatedAt: job.CreatedAt.Format(time.RFC3339),
+			})
+		}
+	}
+
+	// Calculate pagination metadata
+	pageSize := paginationReq.GetLimit()
+	totalPages := int((totalCount + int64(pageSize-1)) / int64(pageSize))
+	if totalPages == 0 {
+		totalPages = 1
+	}
+
+	pagination := &dto.PaginationMeta{
+		CurrentPage: paginationReq.GetPage(),
+		TotalPages:  totalPages,
+		TotalItems:  totalCount,
+		PageSize:    pageSize,
+	}
+
+	return dto.SendPaginatedResponse(c, http.StatusOK, "Videos retrieved successfully", videos, pagination)
+}
+

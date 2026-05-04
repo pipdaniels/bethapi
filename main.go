@@ -47,13 +47,7 @@ func main() {
 	var genAIClient *genai.Client
 	var genAIErr error
 
-	if config.AppConfig.GoogleProjectID != "" {
-		genAIClient, genAIErr = genai.NewClient(ctx, &genai.ClientConfig{
-			Project:  config.AppConfig.GoogleProjectID,
-			Location: config.AppConfig.GoogleLocation,
-			Backend:  genai.BackendVertexAI,
-		})
-	} else {
+	if config.AppConfig.GoogleAIKey != "" {
 		genAIClient, genAIErr = genai.NewClient(ctx, &genai.ClientConfig{
 			APIKey:  config.AppConfig.GoogleAIKey,
 			Backend: genai.BackendGeminiAPI,
@@ -124,7 +118,8 @@ func main() {
 	gen.POST("", genHandler.Generate)
 	gen.POST("/compose", genHandler.Compose)
 
-	// Jobs & SSE
+	// Videos & SSE
+	v1.GET("/videos", genHandler.ListVideos, middleware.CombinedAuthMiddleware)
 	v1.GET("/jobs/:id/stream", genHandler.JobStream)
 
 	// Start Server

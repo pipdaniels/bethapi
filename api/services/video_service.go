@@ -99,9 +99,9 @@ func (s *VideoService) ComposeVideos(ctx context.Context, clips []CompositionCli
 
 		offset := currentOffset - transDuration
 		nextOut := fmt.Sprintf("vout%d", i)
-		filterGraph += fmt.Sprintf("[%s][%s]xfade=transition=%s:duration=%f:offset=%f[%s];", 
+		filterGraph += fmt.Sprintf("[%s][%s]xfade=transition=%s:duration=%f:offset=%f[%s];",
 			lastOut, fmt.Sprintf("v%d", i), transType, transDuration, offset, nextOut)
-		
+
 		lastOut = nextOut
 		currentOffset = offset + durations[i]
 	}
